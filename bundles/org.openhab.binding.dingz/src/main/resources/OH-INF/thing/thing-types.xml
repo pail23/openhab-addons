@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="dingz"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+	<!-- Sample Thing Type -->
+	<thing-type id="dingzwlanswitch">
+		<label>dingz switch</label>
+		<description>dingz wlan switch</description>
+
+		<channels>
+			<channel id="temperature" typeId="temperature-channel"/>
+			<channel id="target-temperature" typeId="target-temperature-channel"/>
+			<channel id="thermostat-mode" typeId="thermostat-mode-channel"/>
+			<channel id="thermostat-output" typeId="thermostat-output-channel"/>
+		</channels>
+
+		<config-description>
+			<parameter name="hostname" type="text">
+				<label>Hostname</label>
+				<description>The host name or IP address of the myStrom plug.</description>
+				<context>network-address</context>
+				<default>localhost</default>
+			</parameter>
+			<parameter name="refresh" type="integer" unit="s" min="1">
+				<label>Refresh Interval</label>
+				<description>Specifies the refresh interval in seconds.</description>
+				<default>10</default>
+			</parameter>
+		</config-description>
+
+	</thing-type>
+
+	<channel-type id="temperature-channel">
+		<item-type>Number:Temperature</item-type>
+		<label>Temperature</label>
+		<description>The current temperature at the switch</description>
+		<state readOnly="true"/>
+	</channel-type>
+
+	<channel-type id="target-temperature-channel">
+		<item-type>Number:Temperature</item-type>
+		<label>Target Temperature</label>
+		<description>The current target temperature</description>
+	</channel-type>
+
+	<channel-type id="thermostat-mode-channel">
+		<item-type>String</item-type>
+		<label>Thermostat Mode</label>
+		<description>The current thermostat mode</description>
+		<state readOnly="true"/>
+	</channel-type>
+
+	<channel-type id="thermostat-output-channel">
+		<item-type>Switch</item-type>
+		<label>Thermostat Output</label>
+		<description>The thermostat output</description>
+		<state readOnly="true"/>
+	</channel-type>
+</thing:thing-descriptions>
