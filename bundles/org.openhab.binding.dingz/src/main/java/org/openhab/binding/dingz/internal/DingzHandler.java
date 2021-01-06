@@ -12,6 +12,9 @@
  */
 package org.openhab.binding.dingz.internal;
 
+import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_BRIGHTNESS;
+import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_MAX_TARGET_TEMPERATURE;
+import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_MIN_TARGET_TEMPERATURE;
 import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_TARGET_TEMPERATURE;
 import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_TEMPERATURE;
 import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_THERMOSTAT_MODE;
@@ -30,6 +33,7 @@ import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.http.HttpMethod;
 import org.openhab.core.cache.ExpiringCache;
+import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.library.types.StringType;
@@ -60,12 +64,33 @@ public class DingzHandler extends BaseThingHandler {
         public String mode = "";
         public boolean on;
         public float temp;
+        public int min_target_temp;
+        public int max_target_temp;
+    }
+
+    private static class PowerValueReport {
+        public float value;
+    }
+
+    private static class DingzSensorReport {
+
+        public int brightness;
+        public String light_state = "";
+        public float room_temperature;
+        public PowerValueReport[] power_outputs = new PowerValueReport[0];
+    }
+
+    private static class DingzStateReport {
+        public DingzSensorReport sensors = new DingzSensorReport();
+        public DingzThermostatReport thermostat = new DingzThermostatReport();
     }
 
     private static final int HTTP_OK_CODE = 200;
     private static final String COMMUNICATION_ERROR = "Error while communicating to the myStrom plug: ";
     private static final String HTTP_REQUEST_URL_PREFIX = "http://";
     private static final String THERMOSTAT_CALL = "api/v1/thermostat";
+    private static final String SENSORS_CALL = "api/v1/sensors";
+    private static final String STATE_CALL = "api/v1/state";
 
     private final Logger logger = LoggerFactory.getLogger(DingzHandler.class);
 
@@ -73,7 +98,9 @@ public class DingzHandler extends BaseThingHandler {
     private String hostname = "";
 
     private @Nullable ScheduledFuture<?> pollingJob;
-    private ExpiringCache<DingzThermostatReport> cache = new ExpiringCache<>(Duration.ofSeconds(3), this::getReport);
+
+    private ExpiringCache<DingzStateReport> stateCache = new ExpiringCache<>(Duration.ofSeconds(3),
+            this::getStateValues);
     private final Gson gson = new Gson();
 
     public DingzHandler(Thing thing, HttpClient httpClient) {
@@ -89,9 +116,12 @@ public class DingzHandler extends BaseThingHandler {
             } else {
                 if (CHANNEL_TARGET_TEMPERATURE.equals(channelUID.getId()) && command instanceof Number) {
                     Number value = (Number) command;
-                    // float value = (command as Number).floatValue();
                     Float floatValue = value.floatValue();
-                    sendHttpPost(THERMOSTAT_CALL, "target_temp", floatValue.toString());
+                    String response = sendHttpPost(THERMOSTAT_CALL, "target_temp", floatValue.toString());
+                    DingzThermostatReport report = gson.fromJson(response, DingzThermostatReport.class);
+                    if (report != null) {
+                        updateThermostat(report);
+                    }
                     scheduler.schedule(this::pollDevice, 500, TimeUnit.MILLISECONDS);
                 }
             }
@@ -100,10 +130,10 @@ public class DingzHandler extends BaseThingHandler {
         }
     }
 
-    private @Nullable DingzThermostatReport getReport() {
+    private @Nullable DingzStateReport getStateValues() {
         try {
-            String returnContent = sendHttpGet(THERMOSTAT_CALL);
-            DingzThermostatReport report = gson.fromJson(returnContent, DingzThermostatReport.class);
+            String returnContent = sendHttpGet(STATE_CALL);
+            DingzStateReport report = gson.fromJson(returnContent, DingzStateReport.class);
             updateStatus(ThingStatus.ONLINE);
             return report;
         } catch (DingzException e) {
@@ -113,13 +143,29 @@ public class DingzHandler extends BaseThingHandler {
     }
 
     private void pollDevice() {
-        DingzThermostatReport report = cache.getValue();
-        if (report != null) {
-            updateState(CHANNEL_THERMOSTAT_OUTPUT, report.on ? OnOffType.ON : OnOffType.OFF);
-            updateState(CHANNEL_THERMOSTAT_MODE, StringType.valueOf(report.mode));
-            updateState(CHANNEL_TEMPERATURE, QuantityType.valueOf(report.temp, CELSIUS));
-            updateState(CHANNEL_TARGET_TEMPERATURE, QuantityType.valueOf(report.target_temp, CELSIUS));
+        DingzStateReport stateReport = stateCache.getValue();
+        if (stateReport != null) {
+            if (stateReport.sensors != null) {
+                updateSensor(stateReport.sensors);
+            }
+            if (stateReport.thermostat != null) {
+                updateThermostat(stateReport.thermostat);
+            }
         }
+    }
+
+    private void updateThermostat(DingzThermostatReport report) {
+        updateState(CHANNEL_THERMOSTAT_OUTPUT, report.on ? OnOffType.ON : OnOffType.OFF);
+        updateState(CHANNEL_THERMOSTAT_MODE, StringType.valueOf(report.mode));
+        // updateState(CHANNEL_TEMPERATURE, QuantityType.valueOf(report.temp, CELSIUS));
+        updateState(CHANNEL_TARGET_TEMPERATURE, QuantityType.valueOf(report.target_temp, CELSIUS));
+        updateState(CHANNEL_MIN_TARGET_TEMPERATURE, QuantityType.valueOf(report.min_target_temp, CELSIUS));
+        updateState(CHANNEL_MAX_TARGET_TEMPERATURE, QuantityType.valueOf(report.max_target_temp, CELSIUS));
+    }
+
+    private void updateSensor(DingzSensorReport report) {
+        updateState(CHANNEL_TEMPERATURE, QuantityType.valueOf(report.room_temperature, CELSIUS));
+        updateState(CHANNEL_BRIGHTNESS, new DecimalType(report.brightness));
     }
 
     @Override

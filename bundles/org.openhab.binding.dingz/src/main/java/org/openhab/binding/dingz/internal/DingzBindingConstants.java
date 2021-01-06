@@ -34,6 +34,10 @@ public class DingzBindingConstants {
     // List of all Channel ids
     public static final String CHANNEL_TEMPERATURE = "temperature";
     public static final String CHANNEL_TARGET_TEMPERATURE = "target-temperature";
+    public static final String CHANNEL_MIN_TARGET_TEMPERATURE = "min-target-temperature";
+    public static final String CHANNEL_MAX_TARGET_TEMPERATURE = "max-target-temperature";
     public static final String CHANNEL_THERMOSTAT_MODE = "thermostat-mode";
     public static final String CHANNEL_THERMOSTAT_OUTPUT = "thermostat-output";
+
+    public static final String CHANNEL_BRIGHTNESS = "brightness";
 }

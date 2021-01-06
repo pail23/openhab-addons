@@ -12,8 +12,12 @@
 		<channels>
 			<channel id="temperature" typeId="temperature-channel"/>
 			<channel id="target-temperature" typeId="target-temperature-channel"/>
+			<channel id="min-target-temperature" typeId="min-target-temperature-channel"/>
+			<channel id="max-target-temperature" typeId="max-target-temperature-channel"/>
 			<channel id="thermostat-mode" typeId="thermostat-mode-channel"/>
 			<channel id="thermostat-output" typeId="thermostat-output-channel"/>
+
+			<channel id="brightness" typeId="brightness-channel"/>
 		</channels>
 
 		<config-description>
@@ -39,6 +43,20 @@
 		<state readOnly="true"/>
 	</channel-type>
 
+	<channel-type id="min-target-temperature-channel">
+		<item-type>Number:Temperature</item-type>
+		<label>Minimum Temperature</label>
+		<description>The minimum target temperature</description>
+		<state readOnly="true"/>
+	</channel-type>
+
+	<channel-type id="max-target-temperature-channel">
+		<item-type>Number:Temperature</item-type>
+		<label>Maximum Temperature</label>
+		<description>The maximum target temperature</description>
+		<state readOnly="true"/>
+	</channel-type>
+
 	<channel-type id="target-temperature-channel">
 		<item-type>Number:Temperature</item-type>
 		<label>Target Temperature</label>
@@ -56,6 +74,13 @@
 		<item-type>Switch</item-type>
 		<label>Thermostat Output</label>
 		<description>The thermostat output</description>
+		<state readOnly="true"/>
+	</channel-type>
+
+	<channel-type id="brightness-channel">
+		<item-type>Number</item-type>
+		<label>Brightness</label>
+		<description>The brightness in the room</description>
 		<state readOnly="true"/>
 	</channel-type>
 </thing:thing-descriptions>
