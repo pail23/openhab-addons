@@ -40,4 +40,10 @@ public class DingzBindingConstants {
     public static final String CHANNEL_THERMOSTAT_OUTPUT = "thermostat-output";
 
     public static final String CHANNEL_BRIGHTNESS = "brightness";
+    public static final String CHANNEL_LED = "led";
+
+    public static final String CHANNEL_POWER1 = "power1";
+    public static final String CHANNEL_POWER2 = "power2";
+    public static final String CHANNEL_POWER3 = "power3";
+    public static final String CHANNEL_POWER4 = "power4";
 }

@@ -13,13 +13,19 @@
 package org.openhab.binding.dingz.internal;
 
 import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_BRIGHTNESS;
+import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_LED;
 import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_MAX_TARGET_TEMPERATURE;
 import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_MIN_TARGET_TEMPERATURE;
+import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_POWER1;
+import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_POWER2;
+import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_POWER3;
+import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_POWER4;
 import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_TARGET_TEMPERATURE;
 import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_TEMPERATURE;
 import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_THERMOSTAT_MODE;
 import static org.openhab.binding.dingz.internal.DingzBindingConstants.CHANNEL_THERMOSTAT_OUTPUT;
 import static org.openhab.core.library.unit.SIUnits.CELSIUS;
+import static org.openhab.core.library.unit.Units.WATT;
 
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
@@ -31,10 +37,14 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
+import org.eclipse.jetty.client.api.Request;
+import org.eclipse.jetty.client.util.StringContentProvider;
 import org.eclipse.jetty.http.HttpMethod;
 import org.openhab.core.cache.ExpiringCache;
 import org.openhab.core.library.types.DecimalType;
+import org.openhab.core.library.types.HSBType;
 import org.openhab.core.library.types.OnOffType;
+import org.openhab.core.library.types.PercentType;
 import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.thing.ChannelUID;
@@ -68,6 +78,21 @@ public class DingzHandler extends BaseThingHandler {
         public int max_target_temp;
     }
 
+    private static class DingzLedReport {
+
+        public String mode = "";
+        public boolean on;
+        public String rgb = "";
+        public String hsv = "";
+    }
+
+    private static class DingzSetLedReport {
+
+        public String color = "";
+        public boolean on;
+        public String mode = "";
+    }
+
     private static class PowerValueReport {
         public float value;
     }
@@ -82,14 +107,14 @@ public class DingzHandler extends BaseThingHandler {
 
     private static class DingzStateReport {
         public DingzSensorReport sensors = new DingzSensorReport();
+        public DingzLedReport led = new DingzLedReport();
         public DingzThermostatReport thermostat = new DingzThermostatReport();
     }
 
     private static final int HTTP_OK_CODE = 200;
-    private static final String COMMUNICATION_ERROR = "Error while communicating to the myStrom plug: ";
+    private static final String COMMUNICATION_ERROR = "Error while communicating to the dingz switch: ";
     private static final String HTTP_REQUEST_URL_PREFIX = "http://";
     private static final String THERMOSTAT_CALL = "api/v1/thermostat";
-    private static final String SENSORS_CALL = "api/v1/sensors";
     private static final String STATE_CALL = "api/v1/state";
 
     private final Logger logger = LoggerFactory.getLogger(DingzHandler.class);
@@ -114,16 +139,48 @@ public class DingzHandler extends BaseThingHandler {
             if (command instanceof RefreshType) {
                 pollDevice();
             } else {
-                if (CHANNEL_TARGET_TEMPERATURE.equals(channelUID.getId()) && command instanceof Number) {
-                    Number value = (Number) command;
-                    Float floatValue = value.floatValue();
-                    String response = sendHttpPost(THERMOSTAT_CALL, "target_temp", floatValue.toString());
-                    DingzThermostatReport report = gson.fromJson(response, DingzThermostatReport.class);
-                    if (report != null) {
-                        updateThermostat(report);
-                    }
-                    scheduler.schedule(this::pollDevice, 500, TimeUnit.MILLISECONDS);
+                switch (channelUID.getId()) {
+                    case CHANNEL_TARGET_TEMPERATURE:
+                        if (command instanceof Number) {
+                            Number value = (Number) command;
+                            String response = sendHttpPost(THERMOSTAT_CALL,
+                                    RequestParameter.createParameter("target_temp", value.floatValue()));
+                            DingzThermostatReport report = gson.fromJson(response, DingzThermostatReport.class);
+                            if (report != null) {
+                                updateThermostat(report);
+                            }
+                        }
+                        break;
+                    case CHANNEL_LED:
+                        RequestParameter parameters = null;
+                        if (command instanceof HSBType) {
+                            HSBType value = (HSBType) command;
+                            String color = String.format("%d;%d;%d", value.getHue().intValue(),
+                                    value.getSaturation().intValue(), value.getBrightness().intValue());
+                            String action = value.getBrightness().intValue() > 0 ? "on" : "off";
+
+                            parameters = RequestParameter.createParameter("action", action).add("color", color)
+                                    .add("mode", "hsv");
+                        } else if (command instanceof OnOffType) {
+                            parameters = RequestParameter.createParameter("action",
+                                    command.equals(OnOffType.ON) ? "on" : "off");
+                        }
+                        if (parameters != null) {
+                            String response = sendHttpPostWithContent("api/v1/led/set", parameters);
+
+                            DingzSetLedReport report = gson.fromJson(response, DingzSetLedReport.class);
+                            if (report != null) {
+                                HSBType hsbType = new HSBType(report.color.replace(';', ','));
+                                if (!report.on) {
+                                    hsbType = new HSBType(hsbType.getHue(), hsbType.getSaturation(),
+                                            new PercentType(0));
+                                }
+                                updateState(CHANNEL_LED, hsbType);
+                            }
+                        }
+                        break;
                 }
+
             }
         } catch (DingzException e) {
             logger.warn("Error while handling command {}", e.getMessage());
@@ -151,13 +208,15 @@ public class DingzHandler extends BaseThingHandler {
             if (stateReport.thermostat != null) {
                 updateThermostat(stateReport.thermostat);
             }
+            if (stateReport.led != null) {
+                updateLED(stateReport.led);
+            }
         }
     }
 
     private void updateThermostat(DingzThermostatReport report) {
         updateState(CHANNEL_THERMOSTAT_OUTPUT, report.on ? OnOffType.ON : OnOffType.OFF);
         updateState(CHANNEL_THERMOSTAT_MODE, StringType.valueOf(report.mode));
-        // updateState(CHANNEL_TEMPERATURE, QuantityType.valueOf(report.temp, CELSIUS));
         updateState(CHANNEL_TARGET_TEMPERATURE, QuantityType.valueOf(report.target_temp, CELSIUS));
         updateState(CHANNEL_MIN_TARGET_TEMPERATURE, QuantityType.valueOf(report.min_target_temp, CELSIUS));
         updateState(CHANNEL_MAX_TARGET_TEMPERATURE, QuantityType.valueOf(report.max_target_temp, CELSIUS));
@@ -166,6 +225,18 @@ public class DingzHandler extends BaseThingHandler {
     private void updateSensor(DingzSensorReport report) {
         updateState(CHANNEL_TEMPERATURE, QuantityType.valueOf(report.room_temperature, CELSIUS));
         updateState(CHANNEL_BRIGHTNESS, new DecimalType(report.brightness));
+
+        updateState(CHANNEL_POWER1, QuantityType.valueOf(report.power_outputs[0].value, WATT));
+        updateState(CHANNEL_POWER2, QuantityType.valueOf(report.power_outputs[1].value, WATT));
+        updateState(CHANNEL_POWER3, QuantityType.valueOf(report.power_outputs[2].value, WATT));
+        updateState(CHANNEL_POWER4, QuantityType.valueOf(report.power_outputs[3].value, WATT));
+    }
+
+    private void updateLED(DingzLedReport report) {
+        if (report.mode.equals("hsv")) {
+            HSBType hsbType = new HSBType(report.hsv.replace(';', ','));
+            updateState(CHANNEL_LED, hsbType);
+        }
     }
 
     @Override
@@ -196,32 +267,36 @@ public class DingzHandler extends BaseThingHandler {
      */
     public String sendHttpGet(String action) throws DingzException {
         String url = hostname + "/" + action;
-        ContentResponse response = null;
-        try {
-            response = httpClient.newRequest(url).timeout(10, TimeUnit.SECONDS).method(HttpMethod.GET).send();
-        } catch (InterruptedException | TimeoutException | ExecutionException e) {
-            throw new DingzException(COMMUNICATION_ERROR + e.getMessage());
-        }
-
-        if (response.getStatus() != HTTP_OK_CODE) {
-            throw new DingzException(
-                    "Error sending HTTP GET request to " + url + ". Got response code: " + response.getStatus());
-        }
-        return response.getContentAsString();
+        Request request = httpClient.newRequest(url).timeout(10, TimeUnit.SECONDS).method(HttpMethod.GET);
+        return sendHttpRequest(request);
     }
 
-    private String sendHttpPost(String action, String parameter, String value) throws DingzException {
-        String url = hostname + "/" + action + "?" + parameter + "=" + value;
+    private String sendHttpPost(String action, RequestParameter parameter) throws DingzException {
+        String url = hostname + "/" + action + "?" + parameter.toString();
+        Request request = httpClient.newRequest(url).timeout(10, TimeUnit.SECONDS).method(HttpMethod.POST);
+        return sendHttpRequest(request);
+    }
+
+    private String sendHttpPostWithContent(String action, RequestParameter parameter) throws DingzException {
+        String url = hostname + "/" + action;
+        StringContentProvider provider = new StringContentProvider(parameter.toString());
+
+        Request request = httpClient.newRequest(url).timeout(10, TimeUnit.SECONDS).method(HttpMethod.POST)
+                .content(provider);
+        return sendHttpRequest(request);
+    }
+
+    private String sendHttpRequest(Request request) throws DingzException {
         ContentResponse response = null;
         try {
-            response = httpClient.newRequest(url).timeout(10, TimeUnit.SECONDS).method(HttpMethod.POST).send();
+            response = request.send();
         } catch (InterruptedException | TimeoutException | ExecutionException e) {
             throw new DingzException(COMMUNICATION_ERROR + e.getMessage());
         }
 
         if (response.getStatus() != HTTP_OK_CODE) {
-            throw new DingzException(
-                    "Error sending HTTP POST request to " + url + ". Got response code: " + response.getStatus());
+            throw new DingzException("Error sending HTTP request to " + request.getPath() + ". Got response code: "
+                    + response.getStatus());
         }
         return response.getContentAsString();
     }

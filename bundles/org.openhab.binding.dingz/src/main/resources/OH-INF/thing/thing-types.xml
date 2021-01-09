@@ -18,6 +18,23 @@
 			<channel id="thermostat-output" typeId="thermostat-output-channel"/>
 
 			<channel id="brightness" typeId="brightness-channel"/>
+			<channel id="led" typeId="led-channel"/>
+			<channel id="power1" typeId="power-channel">
+				<label>Power output 1</label>
+				<description>The power at output 1</description>
+			</channel>
+			<channel id="power2" typeId="power-channel">
+				<label>Power output 2</label>
+				<description>The power at output 2</description>
+			</channel>
+			<channel id="power3" typeId="power-channel">
+				<label>Power output 3</label>
+				<description>The power at output 3</description>
+			</channel>
+			<channel id="power4" typeId="power-channel">
+				<label>Power output 4</label>
+				<description>The power at output 4</description>
+			</channel>
 		</channels>
 
 		<config-description>
@@ -81,6 +98,23 @@
 		<item-type>Number</item-type>
 		<label>Brightness</label>
 		<description>The brightness in the room</description>
+		<state readOnly="true"/>
+	</channel-type>
+
+	<channel-type id="led-channel">
+		<item-type>Color</item-type>
+		<label>LED</label>
+		<description>The color channel allows to control the color of the LED.
+			It is also possible to dim values and switch the
+			light on and off.
+		</description>
+		<category>ColorLight</category>
+	</channel-type>
+
+	<channel-type id="power-channel">
+		<item-type>Number:Power</item-type>
+		<label>Power output</label>
+		<description>The current power at the output</description>
 		<state readOnly="true"/>
 	</channel-type>
 </thing:thing-descriptions>
